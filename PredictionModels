@@ -1,0 +1,73 @@
+## Subsetting main data for just the variables we want 
+
+svm_data <- subset(missing_mig, select = c("Region.of.Incident", "Reported.Date", "Number.Dead", 
+                                           "Minimum.Estimated.Number.of.Missing",  
+                                           "Number.of.Survivors", "Number.of.Females", "Number.of.Males", "Number.of.Children",
+                                           "Cause.of.Death", "Migration.Route"))
+## Creating a linear model 
+
+lin.mod <- lm(formula = Number.Dead ~ Number.of.Survivors + Number.of.Females +
+                Number.of.Males + Number.of.Children, data = svm_train)
+summary(lin.mod)
+
+plot(lin.mod)
+
+##############################################################################
+# Our P values are all really low for each of the independent variables which is 
+# probably due to the fact that the numerical variables all describe the constitution
+# of each group (ie number of men, women, and children). 
+# Even though the P values are small, the adjusted R^2 is horrible. Only 6% of the variance 
+# in our output variable is explained by variance in the inputs. 
+##############################################################################
+
+## Creating a training and a testing data set 
+
+nrows <- nrow(svm_data)
+sample_size <- round(nrows*.70)
+
+training_index <- sample(1:nrows, size = sample_size, replace = FALSE)
+
+svm_train <- svm_data[training_index, ]
+svm_test <- svm_data[-training_index, ]
+
+## Creating an SVM model to predict number of dead based on all other variables in our subset from above
+
+library(kernlab)
+
+ksvm_model <- ksvm(Number.Dead ~ ., data = svm_train, type = "eps-svr", kernel = "vanilladot")
+ksvm_model # Training error .823517
+
+pred1 <- predict(ksvm_model, newdata = svm_test)
+pred1
+
+svm_test$pred1 <- pred1
+
+act <- svm_test$Number.Dead
+
+### RMSE 
+
+error1 <- act-pred1
+
+svm_test$error1 <- error1
+
+sqrt(mean(error1)^2) #.861
+
+##############################################################################
+# Total number of dead in test data is 5467 and the sum of our predicted column is 4089
+# Our SVM model missed the total number of deaths by ~25%. 
+##############################################################################
+
+# Neural Network for predicting number of dead 
+
+library(neuralnet)
+
+neural.network <- neuralnet(Number.Dead ~ Number.of.Survivors + Number.of.Females + Number.of.Males + 
+                              Number.of.Children,
+                            data = svm_train, hidden = 4, rep = 1, 
+          lifesign = "minimal", linear.output = TRUE, threshold = 2)
+plot(neural.network)
+##############################################################################
+# The Neural Network is not a going to be a good predictor of Number of Dead as it only takes numeric values. 
+# Our numeric values are too empty to be useful. I will need to dummy code the region and COD manually 
+# Since it seems like the NN doesn't do that for me
+##############################################################################
