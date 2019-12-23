@@ -1,0 +1,95 @@
+missing_migrants <- MissingMigrants.Global.2019.03.29T18.36.07
+str(missing_migrants)
+
+
+##Figuring out how many missing values we have
+sum(is.na(missing_migrants$Number.Dead))
+sum(is.na(missing_migrants$Number.of.Children))
+
+
+##Starting to clean the data set
+###Drop URL 
+missing_migrants <- missing_migrants[ , -18]
+
+###Removing the web ID column
+missing_migrants <- missing_migrants[ , -1]
+
+
+
+#-------------------------------------------------------------------------------
+
+
+#Starting to replace Dead NAs with averages of year
+##Subsetting by year
+sub_2014 <- subset(missing_migrants, Reported.Year==2014)
+
+###Function for subsetting by year
+year_sub_function <- function(year)
+{
+  return(subset(missing_migrants, Reported.Year == year))
+}
+
+###Running the years through the year subset funciton 
+sub_2015 <- year_sub_function(2015)
+sub_2016 <- year_sub_function(2016)
+sub_2017 <- year_sub_function(2017)
+sub_2018 <- year_sub_function(2018)
+sub_2019 <- year_sub_function(2019)
+
+
+###Function for replacing NAs in Number Dead column by year and month 
+
+mean(sub_2014$Number.Dead, na.rm=TRUE) ##Find the mean of the number dead in the subset
+floor(mean(sub_2014$Number.Dead, na.rm=TRUE)) ##Rounding down since we can't have part of a death 
+new <- ifelse(is.na(sub_2014$Number.Dead), mean(sub_2014$Number.Dead, na.rm=TRUE), sub_2014$Number.Dead) ##ifelse to replace NA values if yes, if no replace with original value
+new
+
+dead_replace_fn <- function(input_vector)
+{
+  new_vector <- ifelse(is.na(input_vector), floor(mean(input_vector, na.rm=TRUE)), input_vector)
+  return(new_vector)
+}
+
+sub_2014$Number.Dead <- dead_replace_fn(sub_2014$Number.Dead)
+sub_2015$Number.Dead <- dead_replace_fn(sub_2015$Number.Dead)
+sub_2016$Number.Dead <- dead_replace_fn(sub_2016$Number.Dead)
+sub_2017$Number.Dead <- dead_replace_fn(sub_2017$Number.Dead)
+sub_2018$Number.Dead <- dead_replace_fn(sub_2018$Number.Dead)
+sub_2019$Number.Dead <- dead_replace_fn(sub_2019$Number.Dead)
+
+##Combining the subsets back into one data frame 
+missing_mig <- rbind.data.frame(sub_2014, sub_2015, sub_2016, sub_2017, sub_2018, sub_2019)
+
+
+
+
+#-------------------------------------------------------------------------------------
+#Replacing NAs in estimated missing column with 0s 
+
+missing_mig$Minimum.Estimated.Number.of.Missing <- ifelse(is.na(missing_mig$Minimum.Estimated.Number.of.Missing), 0, missing_mig$Minimum.Estimated.Number.of.Missing)
+
+
+
+#-------------------------------------------------------------------------------------
+#Cleaning the totale dead and missing column 
+##Making sure that number dead + number misisng equal total dead and missing 
+dead_vector <- missing_mig$Number.Dead ##Pull out dead column
+missing_vector <- missing_mig$Minimum.Estimated.Number.of.Missing ##Pull out missing column 
+
+##Replacing values that do not add up (holy shit it worked)
+missing_mig$Total.Dead.and.Missing <- ifelse(dead_vector + missing_vector != missing_mig$Total.Dead.and.Missing, 
+                                             dead_vector + missing_vector, missing_mig$Total.Dead.and.Missing)
+
+ 
+
+#-------------------------------------------------------------------------------------
+#Replacing NAs in number of survivors with 0s 
+
+missing_mig$Number.of.Survivors <- ifelse(is.na(missing_mig$Number.of.Survivors), 0, missing_mig$Number.of.Survivors)
+
+
+#Replacing NAs in number of males, females, and children with 0s 
+
+missing_mig$Number.of.Males <- ifelse(is.na(missing_mig$Number.of.Males), 0, missing_mig$Number.of.Males)
+missing_mig$Number.of.Females <- ifelse(is.na(missing_mig$Number.of.Females), 0, missing_mig$Number.of.Females)  
+missing_mig$Number.of.Children <- ifelse(is.na(missing_mig$Number.of.Children), 0, missing_mig$Number.of.Children)
