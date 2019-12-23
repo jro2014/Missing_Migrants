@@ -1,0 +1,158 @@
+#IST687_R_Code_for_Stat_Graphs_and_GeoPlots -- Robert Eason
+####################################################################################################################################
+####################################################################################################################################
+
+##### Load Relevant Libraries
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(maps)
+library(maptools)
+library(ggraph)
+library(igraph)
+library(ggmap)
+library(rworldmap)
+library(sp)
+library(readxl)
+library(ggalluvial)
+
+# SET API KEY
+ggmap::register_google(key = "AIzaSyDgYBbtTEOpck5RbkcOjKLpFcUnRdirJ5w")  # use your own key if you have one, they charge for each use.
+
+##### Data preprocessing
+
+unprocessed_events <- read_excel("C:/Users/Chip/Documents/Syracuse/IST687/Project/Missing_Migrants_Dataset_2019OCT20.xlsx")
+unprocessed_events 
+
+processed_events_2 <- cbind(unprocessed_events, str_split_fixed(unprocessed_events$`Location Coordinates`, ",", 2))
+
+
+
+names(processed_events_2)[21] <- "Latitude"
+names(processed_events_2)[22] <- "Longitude"
+processed_events_2$Longitude <- as.numeric(as.character(processed_events_2$Longitude))
+processed_events_2$Latitude <- as.numeric(as.character(processed_events_2$Latitude))
+
+#View(processed_events_2)
+
+events <- processed_events_2
+events <- filter(events, events$Latitude > -60)
+
+events[is.na(events)] <- 0
+
+#View(events)
+
+#### Visualizing the preprocessed data
+map <- NULL
+mapWorld <- borders("world", colour="gray50")
+map <- ggplot() + mapWorld
+basemap <- map
+map <- map + geom_point(aes(x=events$Longitude, y=events$Latitude) ,color="red", size=1.5, alpha=0.2) 
+map <- map + xlab("LONGITUDE") + ylab("LATITUDE") + ggtitle("Reported Migrant Death and Missing Events: 2014-2019")
+map
+
+#### Understanding initial statistics
+library(dplyr)
+
+events %>%
+  filter(!is.na(`Region of Incident`)) %>%
+  group_by(`Region of Incident`) %>%
+  dplyr::summarise(count=dplyr::n()) %>%
+  ggplot(aes(x = `Region of Incident`, y = count)) + geom_bar(stat = "identity") + xlab("Region") + ylab("Number of Reported Events") +
+  ggtitle("Number of Migrant Death Events reported by Region : 2014-2019") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+events %>%
+  filter(!is.na(`Reported Year`)) %>%
+  group_by(`Reported Year`) %>%
+  dplyr::summarise(count=dplyr::n()) %>%
+  ggplot(aes(x = `Reported Year`, y = count)) + geom_bar(stat = "identity") + xlab("Year") + ylab("Number of Reported Events") +
+  ggtitle("Number of Migrant Death Events reported by Year : 2014-2019") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+events %>%
+  filter(!is.na(`Region of Incident`)) %>%
+  filter(!is.na(`Number Dead`)) %>% 
+  group_by(`Region of Incident`) %>%
+  dplyr::summarise(total = sum(`Number Dead`)) %>%
+  ggplot(aes(x = `Region of Incident`, y = total)) + geom_bar(stat = "identity") + xlab("Region") + ylab("Number of Fatalities") +
+  ggtitle("Number of Migrant Death Toll reported by Region : 2014-2019") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+events %>%
+  filter(!is.na(`Reported Year`)) %>%
+  filter(!is.na(`Number Dead`)) %>% 
+  group_by(`Reported Year`) %>%
+  dplyr::summarise(total = sum(`Number Dead`)) %>%
+  ggplot(aes(x = `Reported Year`, y = total)) + geom_bar(stat = "identity") + xlab("Year") + ylab("Number of Fatalities") +
+  ggtitle("Number of Migrant Death Toll reported by Year : 2014-2019") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+#### Mediterranean region at a Glance
+map <- ggmap(get_googlemap(center = 'mediterranean',zoom=4, maptype = "satellite"))
+med_events <- events %>%
+  filter(`Region of Incident` == "Mediterranean")
+
+#View(med_events)
+
+med_events[1:10,]
+
+map  + ggtitle("Mediterranean Migrant Deaths Events: 2014 - 2019") + geom_density2d(aes(x=Longitude, y=Latitude, colour = 'red'), data=med_events)
+
+map + geom_point(alpha = 0.05, aes(x=Longitude, y=Latitude), data=med_events, col="red", size = med_events$`Number Dead`/10) + scale_size_area() + ggtitle("Mediterranean Migrant Fatalities: A proportional symbol map\n2014 - 2019")
+
+# This is similar to the plot above, but with Total Dead and Missing instead of Number Dead.
+map + geom_point(alpha = 0.4, aes(x=Longitude, y=Latitude, size=med_events$`Total Dead and Missing`, colour=med_events$`Migration Route`), data=med_events) + scale_size_area() + scale_fill_brewer(palette = 3) + guides(color=guide_legend(title="Region"), size=guide_legend(title = "Total Dead and Missing")) +  ggtitle("Mediterranean Migrant Missing and Fatalities Toll: A proportional symbol map\n2014 - 2019")
+
+#### Mediterranean - Understanding statistics
+# We used `factor(match(`Reported Month`, month.abb))` to order the months.
+med_events %>% 
+  mutate(month_number = match(`Reported Month`, month.abb)) %>%
+  ggplot(aes(x=factor(month_number))) + geom_bar() + facet_wrap(~`Migration Route`) + xlab("Reported Month")
+
+med_events %>% 
+  ggplot(aes(x=`Reported Year`)) + geom_bar() + facet_wrap(~`Migration Route`)
+
+med_events %>%
+  mutate(Date=ymd(med_events$"Reported Date")) %>%
+  ggplot(aes(x=Date)) + geom_histogram(binwidth = 28) 
+
+
+map + geom_point(alpha = 0.4, aes(x=Longitude, y=Latitude, size=med_events$`Total Dead and Missing`, colour="red"), data=med_events) + scale_size_area(name="Total dead and missing") + facet_wrap(~`Reported Month`) + scale_colour_discrete(name=NULL, breaks=NULL) 
+
+map + geom_point(alpha = 0.4, aes(x=Longitude, y=Latitude, size=med_events$`Total Dead and Missing`, colour="red"), data=med_events) + scale_size_area(name="Total dead and missing") + facet_wrap(~`Reported Year`) + scale_colour_discrete(name=NULL, breaks=NULL)
+
+
+#### US-Mexico Borders region at a Glance
+map <- ggmap(get_googlemap(center = 'us-mexico border',zoom=4, maptype = "satellite"))
+
+usmex_events <- events %>%
+  filter(`Region of Incident` == "US-Mexico Border")
+
+#View(usmex_events)
+
+usmex_events[1:10,]
+
+map  + ggtitle("US-Mexico Border Migrant Deaths Events: 2014 - 2019") + geom_density2d(aes(x=Longitude, y=Latitude, colour = 'red'), data=usmex_events)
+
+map + geom_point(alpha = 0.05, aes(x=Longitude, y=Latitude), data=usmex_events, col="red", size = usmex_events$`Number Dead`/10) + scale_size_area() + ggtitle("US-Mexico Border Migrant Fatalities: A proportional symbol map\n2014 - 2019")
+
+# This is similar to the plot above, but with Total Dead and Missing instead of Number Dead.
+map + geom_point(alpha = 0.4, aes(x=Longitude, y=Latitude, size=usmex_events$`Total Dead and Missing`, colour=usmex_events$`Migration Route`), data=usmex_events) + scale_size_area() + scale_fill_brewer(palette = 3) + guides(color=guide_legend(title="Region"), size=guide_legend(title = "Total Dead and Missing")) +  ggtitle("US-Mexico Border Migrant Missing and Fatalities Toll: A proportional symbol map\n2014 - 2019")
+
+#### US_Mexico Border - Understanding statistics
+# We used `factor(match(`Reported Month`, month.abb))` to order the months.
+usmex_events %>% 
+  mutate(month_number = match(`Reported Month`, month.abb)) %>%
+  ggplot(aes(x=factor(month_number))) + geom_bar() + facet_wrap(~`Migration Route`) + xlab("Reported Month")
+
+usmex_events %>% 
+  ggplot(aes(x=`Reported Year`)) + geom_bar() + facet_wrap(~`Migration Route`)
+
+usmex_events %>%
+  mutate(Date=ymd(usmex_events$"Reported Date")) %>%
+  ggplot(aes(x=Date)) + geom_histogram(binwidth = 28) 
+
+
+map + geom_point(alpha = 0.4, aes(x=Longitude, y=Latitude, size=usmex_events$`Total Dead and Missing`, colour="red"), data=usmex_events) + scale_size_area(name="Total dead and missing") + facet_wrap(~`Reported Month`) + scale_colour_discrete(name=NULL, breaks=NULL) 
+
+map + geom_point(alpha = 0.4, aes(x=Longitude, y=Latitude, size=usmex_events$`Total Dead and Missing`, colour="red"), data=usmex_events) + scale_size_area(name="Total dead and missing") + facet_wrap(~`Reported Year`) + scale_colour_discrete(name=NULL, breaks=NULL)
+
+####################################################################################################################################
+####################################################################################################################################
